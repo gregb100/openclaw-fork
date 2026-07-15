@@ -125,7 +125,7 @@ export function prepareEmbeddedAttemptPromptContext(input: {
     cloneToolResultPromptProjectionState(input.toolResultPromptProjectionState),
   );
   const promptHistoryChanged = promptToolResultTruncation.messages !== sessionMessages;
-  const { aggregatePressureEngaged } = promptToolResultTruncation;
+  const { aggregatePressureEngaged, aggregateTruncatedCount } = promptToolResultTruncation;
   if (promptHistoryChanged) {
     sessionMessages = promptToolResultTruncation.messages;
   }
@@ -136,14 +136,21 @@ export function prepareEmbeddedAttemptPromptContext(input: {
       `tool result(s) for prompt history ` +
       `(maxChars=${promptToolResultMaxChars} ` +
       `aggregateBudgetChars=${promptToolResultAggregateMaxChars} ` +
-      `aggregate=${promptToolResultTruncation.aggregateTruncatedCount}) ` +
+      `aggregate=${aggregateTruncatedCount}) ` +
       `sessionKey=${sessionLogKey}`;
+    const truncatedSomething = (aggregateTruncatedCount ?? 0) > 0;
     if (aggregatePressureEngaged) {
-      if (!aggregateToolResultPressureWarnings.has(sessionLogKey)) {
-        aggregateToolResultPressureWarnings.add(sessionLogKey);
-        log.warn(
-          `${truncationLog}; aggregate tool-result pressure detected, compaction has been requested; consider /compact or /new if pressure persists`,
-        );
+      if (!truncatedSomething) {
+        // Truncation alone couldn't fix the overflow — force compaction.
+        if (!aggregateToolResultPressureWarnings.has(sessionLogKey)) {
+          aggregateToolResultPressureWarnings.add(sessionLogKey);
+          log.warn(
+            `${truncationLog}; aggregate tool-result pressure detected, compaction has been requested; consider /compact or /new if pressure persists`,
+          );
+        }
+      } else {
+        // Truncation already succeeded — do not force redundant compaction.
+        log.info(`${truncationLog}; truncation succeeded, compaction skipped`);
       }
     } else {
       log.info(truncationLog);
@@ -256,6 +263,7 @@ export function prepareEmbeddedAttemptPromptContext(input: {
 
   return {
     aggregatePressureEngaged,
+    aggregateTruncatedCount,
     contextTokenBudget,
     ...(currentUserTimestampOverride ? { currentUserTimestampOverride } : {}),
     effectivePrompt: input.prompt.effectivePrompt,
