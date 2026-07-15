@@ -382,7 +382,7 @@ function convertContentBlocks(content: readonly unknown[]) {
     });
   }
   if (!hasTextBlock) {
-    blocks.unshift({ type: "text", text: mediaPlaceholder ?? "(see attached image)" });
+    return blocks;
   }
   return blocks;
 }
